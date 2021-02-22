@@ -138,57 +138,7 @@ void multiple_mpisend(){
 
 }
 
-int main( int argc, char *argv[])
-{
-  double sTime, eTime, time, maxTime;
-
-  MPI_Init(&argc, &argv);
-
-  int num_data_points = atoi(argv[1]);
-  int num_time_steps = atoi(argv[2]);
-  N = (int)sqrt(num_data_points);
-  
-  data = (double*)malloc(N*N*sizeof(double));
-  data1 = (double*)malloc(N*N*sizeof(double));
-
-  for(int i=0;i<N;i++)
-    for(int j=0;j<N;j++){
-//      data[i*N+j] = 1;
-      data[i*N+j] = rand()%num_data_points;
-    }
-
-  top = (double*)malloc(N*sizeof(double));
-  bottom = (double*)malloc(N*sizeof(double));
-  left = (double*)malloc(N*sizeof(double));
-  right = (double*)malloc(N*sizeof(double)); 
-  request = (MPI_Request*)malloc(8*N*sizeof(MPI_Request));
-  status = (MPI_Status*)malloc(8*N*sizeof(MPI_Status));
-
-  MPI_Comm_rank(MPI_COMM_WORLD, &myrank) ;
-  MPI_Comm_size(MPI_COMM_WORLD, &size);
-  psize = (int)sqrt((double)size);
-  row = myrank/psize;
-  col = myrank%psize;
-
-  time = 0;
-
-
-  for(int method = 0; method < 3; method++){
-
-    time = 0;
-
-    for(int t = 0;t < num_time_steps;t++){
-  
-    sTime = MPI_Wtime();
-    if(method == 0)
-      multiple_mpisend();
-    else if(method == 1)
-      mpi_pack_unpack();
-    else 
-      mpi_derived_dtype();
-    eTime = MPI_Wtime();
-    time += eTime - sTime;
-  
+void stencil_compute(){
     for(int i=1;i<(N-1);i++)
       for(int j=1;j<(N-1);j++)
         data1[i*N+j] = (data[i*N+j+1] + data[i*N+j-1] + data[(i+1)*N+j] + data[(i-1)*N+j])/4;
@@ -267,6 +217,60 @@ int main( int argc, char *argv[])
       double* temp = data;
       data = data1;
       data1 = temp;
+}
+
+int main( int argc, char *argv[])
+{
+  double sTime, eTime, time, maxTime;
+
+  MPI_Init(&argc, &argv);
+
+  int num_data_points = atoi(argv[1]);
+  int num_time_steps = atoi(argv[2]);
+  N = (int)sqrt(num_data_points);
+  
+  data = (double*)malloc(N*N*sizeof(double));
+  data1 = (double*)malloc(N*N*sizeof(double));
+
+  for(int i=0;i<N;i++)
+    for(int j=0;j<N;j++){
+//      data[i*N+j] = 1;
+      data[i*N+j] = rand()%num_data_points;
+    }
+
+  top = (double*)malloc(N*sizeof(double));
+  bottom = (double*)malloc(N*sizeof(double));
+  left = (double*)malloc(N*sizeof(double));
+  right = (double*)malloc(N*sizeof(double)); 
+  request = (MPI_Request*)malloc(8*N*sizeof(MPI_Request));
+  status = (MPI_Status*)malloc(8*N*sizeof(MPI_Status));
+
+  MPI_Comm_rank(MPI_COMM_WORLD, &myrank) ;
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+  psize = (int)sqrt((double)size);
+  row = myrank/psize;
+  col = myrank%psize;
+
+  time = 0;
+
+
+  for(int method = 0; method < 3; method++){
+
+    time = 0;
+
+    for(int t = 0;t < num_time_steps;t++){
+    sTime = MPI_Wtime();
+
+    if(method == 0)
+      multiple_mpisend();
+    else if(method == 1)
+      mpi_pack_unpack();
+    else 
+      mpi_derived_dtype();
+
+    stencil_compute();
+    eTime = MPI_Wtime();
+    time += eTime - sTime;
     }
   
 //  for(int i=0;i<N;i++){
