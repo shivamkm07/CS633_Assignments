@@ -18,7 +18,7 @@ with open("data", "r") as file1:
         Times.append(float(line.strip('\n')))
 
 # Segregrate the "time series" into data blocks for each P value using Dictionary.
-# For each P value, the structure of the 3d array is #count_executtion (5) * Data_points_per_process (n) * #methods (3)
+# For each P value, the structure of the 3d array is #count_executtion (5) * Data_points_per_process 👎 * #methods (3)
 # A sample output is shown:
 # {16: array([[[0.829921, 0.291374, 0.934776],
 #         [1.274071, 0.891392, 0.619952],
@@ -107,10 +107,7 @@ for p in P_list:
         label = []
         for n in range(len(N_list)):
             P_n_method_data.append(plot_data[p][:, n, method])
-            if (method == 1):
-                label.append(str(N_list[n])+"*"+str(N_list[n]))
-            else:
-                label.append('')
+            label.append(str(N_list[n])+"*"+str(N_list[n]))
 
         boxes[method] = make_boxplot(P_n_method_data, label, colours[method][0], colours[method][1], positions[method])
 
