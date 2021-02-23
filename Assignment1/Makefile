@@ -2,5 +2,5 @@ main:
 	mpicc src.c -o exec -lm
 
 clean:
-	rm exec allocator.log hosts comphosts hostsimproved
+	rm -f exec allocator.log hosts comphosts hostsimproved
 
