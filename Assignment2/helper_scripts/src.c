@@ -12,9 +12,7 @@ int N,myrank,size,groupid;
 MPI_Request* request;
 MPI_Status* status;
 
-#define MAX_INTRASIZE 128
 
-//Creating map of hostid vs groupid i.e. arr[2] = 1, means csews2 resides in group1 
 void create_groupidmap(int* arr){
 	arr[0] = -1;
 	for(int i = 1; i<=16; i++){
@@ -64,25 +62,18 @@ void optimized_bcast(int n){
     char hostname[64];
     int len;
     MPI_Get_processor_name(hostname, &len);
-    //Using last numbers of hostname as hostid e.g. csews30 will have hostid 30
     int hostid = atoi(hostname + 5);
     int groupid_map[93];
     create_groupidmap(groupid_map);
     int groupid = groupid_map[hostid];
-
-    //intragroup is a subcommunicator containing all processes that reside on nodes of same node group
     MPI_Comm intragroup;
-    //Using groupid as coloring criteria
     MPI_Comm_split (MPI_COMM_WORLD, groupid,myrank, &intragroup);
-
     int intragroup_rank;
     MPI_Comm_rank(intragroup, &intragroup_rank);
+//    printf("myrank %d hostid %d groupid %d intragroup_rank %d\n",myrank,hostid,groupid,intragroup_rank);
     
-    //Intergroup subcommunicator consists of all processes with rank 0 in respective intragroup i.e. communicator of leader processes, where processes of rank 0 in respective intragroups are taken as leaders of the intragroup
     MPI_Comm intergroup;
     int color = 0;
-
-    //Intergroup only defined for processes with intragroup_rank 0
     if(intragroup_rank != 0)
       color = MPI_UNDEFINED;
     MPI_Comm_split (MPI_COMM_WORLD, color ,myrank, &intergroup);
@@ -92,10 +83,8 @@ void optimized_bcast(int n){
   
     for(int i=0;i<n;i++){
     if(intragroup_rank == 0){
-      //Broadcasting to all leader processes present in intergroup residing in different node groups
     MPI_Bcast(data,N,MPI_DOUBLE,0,intergroup);
     }
-    //Broadcasting to all members of intragroup from leader process
     MPI_Bcast(data,N,MPI_DOUBLE,0,intragroup);
     }
 
@@ -124,6 +113,7 @@ void optimized_reduce(int n){
     MPI_Comm_split (MPI_COMM_WORLD, groupid,myrank, &intragroup);
     int intragroup_rank;
     MPI_Comm_rank(intragroup, &intragroup_rank);
+//    printf("myrank %d hostid %d groupid %d intragroup_rank %d\n",myrank,hostid,groupid,intragroup_rank);
     
     MPI_Comm intergroup;
     int color = 0;
@@ -135,11 +125,8 @@ void optimized_reduce(int n){
       MPI_Comm_rank(intergroup, &intergroup_rank);
   
     for(int i=0;i<n;i++){
-      //First reducing in intragroup and collecting reduced values at the leader of intragroup
     MPI_Reduce(data,intra_data,N,MPI_DOUBLE,MPI_SUM,0,intragroup);
     if(intragroup_rank == 0){
-
-      //Reducing values collected at leader processes and collecting at the global leader(Rank 0 of intergroup)
     MPI_Reduce(intra_data,recvdata,N,MPI_DOUBLE,MPI_SUM,0,intergroup);
     }
     }
@@ -169,6 +156,7 @@ void optimized_gather(int n){
     MPI_Comm_split (MPI_COMM_WORLD, groupid,myrank, &intragroup);
     int intragroup_rank;
     MPI_Comm_rank(intragroup, &intragroup_rank);
+//    printf("myrank %d hostid %d groupid %d intragroup_rank %d\n",myrank,hostid,groupid,intragroup_rank);
     
     MPI_Comm intergroup;
     int color = 0;
@@ -180,37 +168,23 @@ void optimized_gather(int n){
       MPI_Comm_rank(intergroup, &intergroup_rank);
   
     for(int i=0;i<n;i++){
-      //Appending rank at the end of data to sort the gathered values in the end by rank
-      data[N] = myrank;
-      //Gathering values at the leader of intragroup from the members
-      MPI_Gather(data,(N+1),MPI_DOUBLE,intra_data,(N+1),MPI_DOUBLE,0,intragroup);
+    MPI_Gather(data,N,MPI_DOUBLE,intra_data,N,MPI_DOUBLE,0,intragroup);
+//    MPI_Reduce(data,recvdata,N,MPI_DOUBLE,MPI_SUM,0,intragroup);
     if(intragroup_rank == 0){
       int intragroupsize;
       MPI_Comm_size(intragroup,&intragroupsize);
       int rcounts[10];
-      //Collecting intragroupsize values from all leaders to the global leader, used in gatherv later
       MPI_Gather(&intragroupsize,1,MPI_INT,rcounts,1,MPI_INT,0,intergroup);
       int intergroupsize;
       MPI_Comm_size(intergroup,&intergroupsize);
       int displs[10];
       displs[0]  = 0;
-
-      //Sendcount from a leader will be equal to intragroupsize*(N+1) and so will be the receivecount for the process collecting data
       for(int i=0;i<intergroupsize;i++)
-        rcounts[i] *= (N+1);
+        rcounts[i] *= N;
       for(int i=1;i<intergroupsize;i++)
         displs[i] = displs[i-1] + rcounts[i-1];
 
-      //Using gatherv for collecting data from all leaders to the global leader since intragroupsize for different leaders can be different
-      MPI_Gatherv(intra_data,(N+1)*intragroupsize,MPI_DOUBLE,recvdata1,rcounts,displs,MPI_DOUBLE,0,intergroup);
-
-      //Using the rank appended at the end of data at sendtime to sort the values by rank
-      for(int i=0;i<size;i++){
-        int currank = recvdata1[(N+1)*i + N];
-        for(int j=0; j<N;j++){
-          recvdata[currank*N+j] = recvdata1[(N+1)*i+j];
-        }
-      }
+      MPI_Gatherv(intra_data,N*intragroupsize,MPI_DOUBLE,recvdata,rcounts,displs,MPI_DOUBLE,0,intergroup);
     }
     }
 
@@ -224,7 +198,13 @@ void default_alltoallv(int n){
 
   for(int i=0;i<n;i++){
 
+//  for(int i=0;i<size;i++)
+//    printf("%d ",sendcounts[i]);
+//  printf("\n");
   MPI_Alltoall(sendcounts,1,MPI_INT,recvcounts,1,MPI_INT,MPI_COMM_WORLD);
+//  for(int i=0;i<size;i++)
+//    printf("%d ",recvcounts[i]);
+//  printf("\n");
   rdispls[0] = 0;
   for(int i=1;i<size;i++){
     rdispls[i] = rdispls[i-1] + recvcounts[i-1];
@@ -247,6 +227,7 @@ void optimized_alltoallv(int n){
     int intragroup_rank,intragroup_size;
     MPI_Comm_rank(intragroup, &intragroup_rank);
     MPI_Comm_size(intragroup, &intragroup_size);
+//    printf("myrank %d hostid %d groupid %d intragroup_rank %d\n",myrank,hostid,groupid,intragroup_rank);
     
     MPI_Comm intergroup;
     int color = 0;
@@ -261,9 +242,7 @@ void optimized_alltoallv(int n){
 
     for(int i=0;i<n;i++){
 
-    long pos1 = 0,pos2 = 0;
-
-    //Padding the data
+    int pos1 = 0,pos2 = 0;
     data1[pos2++] = myrank;
     for(int i=0;i<size;i++){
       int cursize = sendcounts[i];
@@ -275,26 +254,37 @@ void optimized_alltoallv(int n){
       }
       pos1 = pos1+cursize;
     }
+//    printf("myrank %lf\n",data1[0]);
+//    for(int i=0;i<size;i++){
+//      printf("rank %lf sendcount %lf ",data1[i*(N+2)+1],data1[i*(N+2)+2]);
+//      for(int j=0;j<data1[i*(N+2)+2];j++)
+//        printf("%lf ",data1[i*(N+2)+3+j]);
+//    printf("\n");
+//    }
 
     MPI_Gather(data1,1+(N+2)*size,MPI_DOUBLE,data2,1+(N+2)*size,MPI_DOUBLE,0,intragroup);
     if(intragroup_rank == 0){
-      int ranks[MAX_INTRASIZE];
+      int ranks[25];
       ranks[0] = intragroup_size;
       for(int i=0;i<intragroup_size;i++){
         ranks[i+1] = data2[(1+(N+2)*size)*i];
       }
 
-      int all_ranks[MAX_INTRASIZE*intergroup_size];
-      MPI_Allgather(ranks,MAX_INTRASIZE,MPI_INT,all_ranks,MAX_INTRASIZE,MPI_INT,intergroup);
+      int all_ranks[25*intergroup_size];
+      MPI_Alltoall(ranks,25,MPI_INT,all_ranks,25,MPI_INT,intergroup);
       pos2 = 0;
       int intergroup_sendcounts[intergroup_size];
       int intergroup_recvcounts[intergroup_size];
+//      printf("intergroupsize %d\n",intergroup_size);
       for(int i=0;i<intergroup_size;i++){
-        int intrasize = all_ranks[MAX_INTRASIZE*i];
-        for(int j=MAX_INTRASIZE*i+1;j<=MAX_INTRASIZE*i+intrasize;j++){
+        int intrasize = all_ranks[25*i];
+//        printf("%d intrasize %d\n",i,intrasize);
+        for(int j=25*i+1;j<=25*i+intrasize;j++){
           int currank = all_ranks[j];
+//          printf("%d\n",currank);
           for(int k=0;k<intragroup_size;k++){
             pos1 = (1+(N+2)*size)*k+1+(N+2)*currank;
+//            printf("%lf %lf %lf\n",data2[pos1],data2[pos1+1],data2[pos1+2]);
             for(int l=0;l<N+2;l++){
               data3[pos2++] = data2[pos1+l];
             }
@@ -303,6 +293,7 @@ void optimized_alltoallv(int n){
         intergroup_sendcounts[i] = intrasize*intragroup_size*(N+2);
         intergroup_recvcounts[i] = intrasize*intragroup_size*(N+2);
       }
+//      printf("intergroup recounts[0] %d\n",intergroup_recvcounts[0]);
       int intergroup_sdispls[intergroup_size];
       int intergroup_rdispls[intergroup_size];
       intergroup_sdispls[0] = 0;
@@ -313,28 +304,51 @@ void optimized_alltoallv(int n){
       }
       MPI_Alltoallv(data3,intergroup_sendcounts,intergroup_sdispls,MPI_DOUBLE,recvdata3,intergroup_recvcounts,intergroup_rdispls,MPI_DOUBLE,intergroup);
 
+ //     for(int i=0;i<intergroup_recvcounts[0]/(N+2);i++){
+ //       printf("%lf %lf %lf\n",recvdata3[i*(N+2)],recvdata3[i*(N+2)+1],recvdata3[i*(N+2)+2]);
+
+ //     }
+
       pos2 = 0;
       for(int i=0;i<intragroup_size;i++){
         int rank = ranks[i];
         for(int j=0;j<intergroup_size;j++){
-          int nblocks = all_ranks[MAX_INTRASIZE*j];
+          int nblocks = all_ranks[25*j];
           pos1 = intergroup_rdispls[j]+nblocks*i*(N+2);
+//          printf("i %d \n",i);
           for(int k=0;k<nblocks*(N+2);k++){
             recvdata2[pos2++] = recvdata3[pos1+k];
+//            if(k%(N+2) == 0)
+//              printf("%lf %lf %lf\n",recvdata3[pos1+k],recvdata3[pos1+k+1],recvdata3[pos1+k+2]);
           }
           }
         }
+//      for(int i=0;i<intergroup_recvcounts[0]/(N+2);i++){
+//        printf("%lf %lf %lf\n",recvdata2[i*(N+2)],recvdata2[i*(N+2)+1],recvdata2[i*(N+2)+2]);
+//
+//      }
     }
       MPI_Scatter(recvdata2,size*(N+2),MPI_DOUBLE,recvdata1,size*(N+2),MPI_DOUBLE,0,intragroup);
       pos1 = 0, pos2 = 0;
       for(int i=0;i<size;i++){
         pos1 = (N+2)*i;
+        if(recvdata1[pos1++] != myrank){
+          printf("Not correct rank data raceived at process myrank %d\n",myrank);
+        }
         recvcounts[i]= recvdata1[pos1++];
         for(int j=0;j<recvcounts[i];j++)
           recvdata[pos2++] = recvdata1[pos1+j];
       }
 
       int pos = 0;
+//      printf("myrank %d ",myrank);
+//      for(int i=0;i<size;i++){
+//        int count = recvcounts[i];
+//        for(int j=0;j<count;j++){
+//          printf("%lf ",recvdata[pos++]);
+//        }
+//      }
+//      printf("myrank\n");
 
     }
     MPI_Comm_free(&intragroup);
@@ -360,21 +374,24 @@ int main( int argc, char *argv[])
   MPI_Comm_rank(MPI_COMM_WORLD, &myrank) ;
   MPI_Comm_size(MPI_COMM_WORLD, &size);
   int coreid = sched_getcpu();
-  data = (double*)malloc((N+1)*size*sizeof(double));
+  data = (double*)malloc(N*size*sizeof(double));
   data1 = (double*)malloc((1+(N+2)*size)*sizeof(double));
-  data2 = (double*)malloc((1+(N+2)*size)*MAX_INTRASIZE*sizeof(double));
-  data3 = (double*)malloc((1+(N+2)*size)*MAX_INTRASIZE*sizeof(double));
-  recvdata3 = (double*)malloc((1+(N+2)*size)*MAX_INTRASIZE*sizeof(double));
-  recvdata2 = (double*)malloc((1+(N+2)*size)*MAX_INTRASIZE*sizeof(double));
-  recvdata1 = (double*)malloc((1+(N+2)*size)*MAX_INTRASIZE*sizeof(double));
-  intra_data = (double*)malloc(N*MAX_INTRASIZE*sizeof(double));
-  recvdata = (double*)malloc((N+1)*(size+1)*sizeof(double));
+  data2 = (double*)malloc((1+(N+2)*size)*25*sizeof(double));
+  data3 = (double*)malloc((1+(N+2)*size)*25*sizeof(double));
+  recvdata3 = (double*)malloc((1+(N+2)*size)*25*sizeof(double));
+  recvdata2 = (double*)malloc((1+(N+2)*size)*25*sizeof(double));
+  recvdata1 = (double*)malloc((1+(N+2)*size)*25*sizeof(double));
+  intra_data = (double*)malloc(N*25*sizeof(double));
+  recvdata = (double*)malloc(N*(size+1)*sizeof(double));
 
   sendcounts = (int*)malloc(size*sizeof(int));
   sdispls = (int*)malloc(size*sizeof(int));
   for(int i=0;i<size;i++){
-    sendcounts[i] = 1;
+    sendcounts[i] = rand()%N;
   }
+//  for(int i=0;i<size;i++)
+//    printf("%d ",sendcounts[i]);
+//  printf("\n");
   sdispls[0] = 0;
   for(int i=1;i<size;i++){
     sdispls[i] = sdispls[i-1] + sendcounts[i-1];
@@ -388,7 +405,7 @@ int main( int argc, char *argv[])
   FILE* fptr;
   //Opening data file for outputting execution time
   if(!myrank)
-    fptr = fopen("data1","a");
+    fptr = fopen("data","a");
 
 
 
@@ -445,6 +462,9 @@ int main( int argc, char *argv[])
     optimized_alltoallv(5);
     eTime = MPI_Wtime();
     optimized_alltoallv_time = (eTime - sTime)/5;
+//  for(int i=0;i<size;i++)
+//    printf("%d ",recvcounts[i]);
+//  printf("\n");
   
     // obtain max time
     MPI_Reduce (&default_bcast_time, &max_default_bcast_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);

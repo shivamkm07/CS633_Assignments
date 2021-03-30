@@ -388,7 +388,7 @@ int main( int argc, char *argv[])
   FILE* fptr;
   //Opening data file for outputting execution time
   if(!myrank)
-    fptr = fopen("data1","a");
+    fptr = fopen("data","a");
 
 
 
