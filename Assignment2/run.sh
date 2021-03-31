@@ -1,4 +1,5 @@
-rm -f output data
+#! /bin/bash
+rm -f output data nohup.out
 touch output
 #chmod u+x create_hostfile
 #make clean

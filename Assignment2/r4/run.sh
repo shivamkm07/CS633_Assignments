@@ -1,9 +1,10 @@
+#! /bin/bash
 rm -f output data
 touch output
 #chmod u+x create_hostfile
 #make clean
 #make
-for i in 1
+for i in {1..10}
 do
   for P in 4 16
   do
