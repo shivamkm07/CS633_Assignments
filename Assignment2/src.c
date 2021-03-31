@@ -599,7 +599,7 @@ int main( int argc, char *argv[])
   data = (double*)malloc((N+1)*size*sizeof(double));
 
   //Allocating other temporray data memory required in several functions
-  data1 = (double*)malloc((1+(N+2)*size)*sizeof(double));
+  data1 = (double*)malloc((1+(N+2)*size)*MAX_INTRASIZE*sizeof(double));
   data2 = (double*)malloc((1+(N+2)*size)*MAX_INTRASIZE*sizeof(double));
   data3 = (double*)malloc((1+(N+2)*size)*MAX_INTRASIZE*sizeof(double));
   recvdata3 = (double*)malloc((1+(N+2)*size)*MAX_INTRASIZE*sizeof(double));
