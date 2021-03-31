@@ -103,7 +103,7 @@ ax1.fig.subplots_adjust(top=0.875)
 ax1.set_xlabels("#Processes x #ProcessesPerNode (P, ppn)")
 ax1.set_ylabels("Execution Time (seconds)")
 ax1.fig.suptitle('MPICH_Bcast Performance') 
-ax1.savefig('plot_Bcast.png')
+ax1.savefig('plot_Bcast.jpg')
 
 
 ax2 = sns.catplot(x="(P, ppn)", y="time", data=reduce_data, kind="box", col="D", hue="mode", palette=sns.color_palette(["lightblue", "orange"]))
@@ -111,7 +111,7 @@ ax2.fig.subplots_adjust(top=0.875)
 ax2.set_xlabels("#Processes x #ProcessesPerNode (P, ppn)")
 ax2.set_ylabels("Execution Time (seconds)")
 ax2.fig.suptitle('MPICH_Reduce Performance') 
-ax2.savefig('plot_Reduce.png')
+ax2.savefig('plot_Reduce.jpg')
 
 
 ax3 = sns.catplot(x="(P, ppn)", y="time", data=gather_data, kind="box", col="D", hue="mode", palette=sns.color_palette(["lightblue", "orange"]))
@@ -119,7 +119,7 @@ ax3.fig.subplots_adjust(top=0.875)
 ax3.set_xlabels("#Processes x #ProcessesPerNode (P, ppn)")
 ax3.set_ylabels("Execution Time (seconds)")
 ax3.fig.suptitle('MPICH_Gather Performance') 
-ax3.savefig('plot_Gather.png')
+ax3.savefig('plot_Gather.jpg')
 
 
 ax4 = sns.catplot(x="(P, ppn)", y="time", data=alltoallv_data, kind="box", col="D", hue="mode", palette=sns.color_palette(["lightblue", "orange"]))
@@ -127,7 +127,7 @@ ax4.fig.subplots_adjust(top=0.875)
 ax4.set_xlabels("#Processes x #ProcessesPerNode (P, ppn)")
 ax4.set_ylabels("Execution Time (seconds)")
 ax4.fig.suptitle('MPICH_Alltoallv Performance') 
-ax4.savefig('plot_Alltoallv.png')
+ax4.savefig('plot_Alltoallv.jpg')
 
 
 
