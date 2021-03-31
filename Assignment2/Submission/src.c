@@ -241,8 +241,143 @@ void default_alltoallv(int n){
 
 }
 
-// Optimized implementation of alltoallv(version1)
+//Optimized implementation of alltoallv(version 1) using padding to make chunksize constant to reduce no of collective calls
 void optimized_alltoallv_v1(int n){
+    char hostname[64];
+    int len;
+    MPI_Get_processor_name(hostname, &len);
+    int hostid = atoi(hostname + 5);
+    int groupid_map[93];
+    create_groupidmap(groupid_map);
+    int groupid = groupid_map[hostid];
+
+    //Creating intragroup of processes on same node group
+    MPI_Comm intragroup;
+    MPI_Comm_split (MPI_COMM_WORLD, groupid,myrank, &intragroup);
+    int intragroup_rank,intragroup_size;
+    MPI_Comm_rank(intragroup, &intragroup_rank);
+    MPI_Comm_size(intragroup, &intragroup_size);
+    
+    //creating inntergroup of leader processes residing on different node groups
+    MPI_Comm intergroup;
+    int color = 0;
+    if(intragroup_rank != 0)
+      color = MPI_UNDEFINED;
+    MPI_Comm_split (MPI_COMM_WORLD, color ,myrank, &intergroup);
+    int intergroup_rank,intergroup_size;
+    if(intragroup_rank == 0){
+    MPI_Comm_rank(intergroup, &intergroup_rank);
+    MPI_Comm_size(intergroup, &intergroup_size);
+    }
+
+    for(int i=0;i<n;i++){
+
+    long pos1 = 0,pos2 = 0;
+
+    //Padding the data so that each data chunk to be sent to each of the processes consist of N+2 Doubles, N is the maximum number of doubles to be sent to each of the processes, and 2 doubles for storing rank of process and actual sendcount of that chunk respectively.
+    //Also myrank appended at the starting, so the total size of the data array is 1 + (N+2)*size doubles
+    data1[pos2++] = myrank;
+    for(int i=0;i<size;i++){
+      int cursize = sendcounts[i];
+      pos2 = 1 + i*(N+2);
+      data1[pos2++] = i;
+      data1[pos2++] = cursize;
+      for(int j=pos1;j<pos1+cursize;j++){
+        data1[pos2++]=data[j];
+      }
+      pos1 = pos1+cursize;
+    }
+
+    //Collecting the data,sendcounts and rank at leader process of intragroup
+    MPI_Gather(data1,1+(N+2)*size,MPI_DOUBLE,data2,1+(N+2)*size,MPI_DOUBLE,0,intragroup);
+
+
+    if(intragroup_rank == 0){
+
+      //ranks[0] is the intragroupsize and rest intragroup_size numbers are the ranks of processes prsent in intragroup
+      int ranks[MAX_INTRASIZE];
+      ranks[0] = intragroup_size;
+      //Taking out myranks sent along with data
+      for(int i=0;i<intragroup_size;i++){
+        ranks[i+1] = data2[(1+(N+2)*size)*i];
+      }
+
+      //All_ranks contain intragroupsize and ranks of all processes, calculated using allgather on ranks array 
+      int all_ranks[MAX_INTRASIZE*intergroup_size];
+      MPI_Allgather(ranks,MAX_INTRASIZE,MPI_INT,all_ranks,MAX_INTRASIZE,MPI_INT,intergroup);
+
+      pos2 = 0;
+      int intergroup_sendcounts[intergroup_size];
+      int intergroup_recvcounts[intergroup_size];
+
+      //Sorting the chunks by the ranks of processes where they have to be sent, ranks of same group grouped together
+      for(int i=0;i<intergroup_size;i++){
+        int intrasize = all_ranks[MAX_INTRASIZE*i];
+        for(int j=MAX_INTRASIZE*i+1;j<=MAX_INTRASIZE*i+intrasize;j++){
+          int currank = all_ranks[j];
+          //Collecting all data chunk to be sent to rank currank
+          for(int k=0;k<intragroup_size;k++){
+            pos1 = (1+(N+2)*size)*k+1+(N+2)*currank;
+            for(int l=0;l<N+2;l++){
+              data3[pos2++] = data2[pos1+l];
+            }
+          }
+        }
+        //intergroup_sendcounts consists of chunksize to be sent to each of the leader process in intergroup i.e. count of chunks to be sent ot each group
+        intergroup_sendcounts[i] = intrasize*intragroup_size*(N+2);
+        intergroup_recvcounts[i] = intrasize*intragroup_size*(N+2);
+      }
+      int intergroup_sdispls[intergroup_size];
+      int intergroup_rdispls[intergroup_size];
+      intergroup_sdispls[0] = 0;
+      intergroup_rdispls[0] = 0;
+      for(int i=1;i<intergroup_size;i++){
+        intergroup_sdispls[i] = intergroup_sdispls[i-1] + intergroup_sendcounts[i-1];
+        intergroup_rdispls[i] = intergroup_rdispls[i-1] + intergroup_recvcounts[i-1];
+      }
+
+      //Collecting data from all groups to the receiving group
+      MPI_Alltoallv(data3,intergroup_sendcounts,intergroup_sdispls,MPI_DOUBLE,recvdata3,intergroup_recvcounts,intergroup_rdispls,MPI_DOUBLE,intergroup);
+
+      pos2 = 0;
+      //Sorting the data again so that data to be received to by each process is grouped together
+      for(int i=0;i<intragroup_size;i++){
+        int rank = ranks[i];
+        //Collecting all data to be sent to rank "rank"
+        for(int j=0;j<intergroup_size;j++){
+          int nblocks = all_ranks[MAX_INTRASIZE*j];
+          pos1 = intergroup_rdispls[j]+nblocks*i*(N+2);
+          for(int k=0;k<nblocks*(N+2);k++){
+            recvdata2[pos2++] = recvdata3[pos1+k];
+          }
+          }
+        }
+    }
+
+    //Scattering data so that each process gets it's each own chunk
+      MPI_Scatter(recvdata2,size*(N+2),MPI_DOUBLE,recvdata1,size*(N+2),MPI_DOUBLE,0,intragroup);
+
+
+      //Finally removing padding and extra space to get recvdata and recvcounts 
+      pos1 = 0, pos2 = 0;
+      for(int i=0;i<size;i++){
+        pos1 = (N+2)*i;
+        recvcounts[i]= recvdata1[pos1++];
+        for(int j=0;j<recvcounts[i];j++)
+          recvdata[pos2++] = recvdata1[pos1+j];
+      }
+
+      int pos = 0;
+
+    }
+    MPI_Comm_free(&intragroup);
+    if(intragroup_rank == 0)
+    MPI_Comm_free(&intergroup);
+
+}
+
+// Optimized implementation of alltoallv(version2)
+void optimized_alltoallv_v2(int n){
     char hostname[64];
     int len;
     MPI_Get_processor_name(hostname, &len);
@@ -445,140 +580,6 @@ void optimized_alltoallv_v1(int n){
 
 }
 
-//Optimized implementation of alltoallv(version 2) using padding to make chunksize constant to reduce no of collective calls
-void optimized_alltoallv_v2(int n){
-    char hostname[64];
-    int len;
-    MPI_Get_processor_name(hostname, &len);
-    int hostid = atoi(hostname + 5);
-    int groupid_map[93];
-    create_groupidmap(groupid_map);
-    int groupid = groupid_map[hostid];
-
-    //Creating intragroup of processes on same node group
-    MPI_Comm intragroup;
-    MPI_Comm_split (MPI_COMM_WORLD, groupid,myrank, &intragroup);
-    int intragroup_rank,intragroup_size;
-    MPI_Comm_rank(intragroup, &intragroup_rank);
-    MPI_Comm_size(intragroup, &intragroup_size);
-    
-    //creating inntergroup of leader processes residing on different node groups
-    MPI_Comm intergroup;
-    int color = 0;
-    if(intragroup_rank != 0)
-      color = MPI_UNDEFINED;
-    MPI_Comm_split (MPI_COMM_WORLD, color ,myrank, &intergroup);
-    int intergroup_rank,intergroup_size;
-    if(intragroup_rank == 0){
-    MPI_Comm_rank(intergroup, &intergroup_rank);
-    MPI_Comm_size(intergroup, &intergroup_size);
-    }
-
-    for(int i=0;i<n;i++){
-
-    long pos1 = 0,pos2 = 0;
-
-    //Padding the data so that each data chunk to be sent to each of the processes consist of N+2 Doubles, N is the maximum number of doubles to be sent to each of the processes, and 2 doubles for storing rank of process and actual sendcount of that chunk respectively.
-    //Also myrank appended at the starting, so the total size of the data array is 1 + (N+2)*size doubles
-    data1[pos2++] = myrank;
-    for(int i=0;i<size;i++){
-      int cursize = sendcounts[i];
-      pos2 = 1 + i*(N+2);
-      data1[pos2++] = i;
-      data1[pos2++] = cursize;
-      for(int j=pos1;j<pos1+cursize;j++){
-        data1[pos2++]=data[j];
-      }
-      pos1 = pos1+cursize;
-    }
-
-    //Collecting the data,sendcounts and rank at leader process of intragroup
-    MPI_Gather(data1,1+(N+2)*size,MPI_DOUBLE,data2,1+(N+2)*size,MPI_DOUBLE,0,intragroup);
-
-
-    if(intragroup_rank == 0){
-
-      //ranks[0] is the intragroupsize and rest intragroup_size numbers are the ranks of processes prsent in intragroup
-      int ranks[MAX_INTRASIZE];
-      ranks[0] = intragroup_size;
-      //Taking out myranks sent along with data
-      for(int i=0;i<intragroup_size;i++){
-        ranks[i+1] = data2[(1+(N+2)*size)*i];
-      }
-
-      //All_ranks contain intragroupsize and ranks of all processes, calculated using allgather on ranks array 
-      int all_ranks[MAX_INTRASIZE*intergroup_size];
-      MPI_Allgather(ranks,MAX_INTRASIZE,MPI_INT,all_ranks,MAX_INTRASIZE,MPI_INT,intergroup);
-
-      pos2 = 0;
-      int intergroup_sendcounts[intergroup_size];
-      int intergroup_recvcounts[intergroup_size];
-
-      //Sorting the chunks by the ranks of processes where they have to be sent, ranks of same group grouped together
-      for(int i=0;i<intergroup_size;i++){
-        int intrasize = all_ranks[MAX_INTRASIZE*i];
-        for(int j=MAX_INTRASIZE*i+1;j<=MAX_INTRASIZE*i+intrasize;j++){
-          int currank = all_ranks[j];
-          //Collecting all data chunk to be sent to rank currank
-          for(int k=0;k<intragroup_size;k++){
-            pos1 = (1+(N+2)*size)*k+1+(N+2)*currank;
-            for(int l=0;l<N+2;l++){
-              data3[pos2++] = data2[pos1+l];
-            }
-          }
-        }
-        //intergroup_sendcounts consists of chunksize to be sent to each of the leader process in intergroup i.e. count of chunks to be sent ot each group
-        intergroup_sendcounts[i] = intrasize*intragroup_size*(N+2);
-        intergroup_recvcounts[i] = intrasize*intragroup_size*(N+2);
-      }
-      int intergroup_sdispls[intergroup_size];
-      int intergroup_rdispls[intergroup_size];
-      intergroup_sdispls[0] = 0;
-      intergroup_rdispls[0] = 0;
-      for(int i=1;i<intergroup_size;i++){
-        intergroup_sdispls[i] = intergroup_sdispls[i-1] + intergroup_sendcounts[i-1];
-        intergroup_rdispls[i] = intergroup_rdispls[i-1] + intergroup_recvcounts[i-1];
-      }
-
-      //Collecting data from all groups to the receiving group
-      MPI_Alltoallv(data3,intergroup_sendcounts,intergroup_sdispls,MPI_DOUBLE,recvdata3,intergroup_recvcounts,intergroup_rdispls,MPI_DOUBLE,intergroup);
-
-      pos2 = 0;
-      //Sorting the data again so that data to be received to by each process is grouped together
-      for(int i=0;i<intragroup_size;i++){
-        int rank = ranks[i];
-        //Collecting all data to be sent to rank "rank"
-        for(int j=0;j<intergroup_size;j++){
-          int nblocks = all_ranks[MAX_INTRASIZE*j];
-          pos1 = intergroup_rdispls[j]+nblocks*i*(N+2);
-          for(int k=0;k<nblocks*(N+2);k++){
-            recvdata2[pos2++] = recvdata3[pos1+k];
-          }
-          }
-        }
-    }
-
-    //Scattering data so that each process gets it's each own chunk
-      MPI_Scatter(recvdata2,size*(N+2),MPI_DOUBLE,recvdata1,size*(N+2),MPI_DOUBLE,0,intragroup);
-
-
-      //Finally removing padding and extra space to get recvdata and recvcounts 
-      pos1 = 0, pos2 = 0;
-      for(int i=0;i<size;i++){
-        pos1 = (N+2)*i;
-        recvcounts[i]= recvdata1[pos1++];
-        for(int j=0;j<recvcounts[i];j++)
-          recvdata[pos2++] = recvdata1[pos1+j];
-      }
-
-      int pos = 0;
-
-    }
-    MPI_Comm_free(&intragroup);
-    if(intragroup_rank == 0)
-    MPI_Comm_free(&intergroup);
-
-}
 
 int main( int argc, char *argv[])
 {
@@ -677,17 +678,17 @@ int main( int argc, char *argv[])
     eTime = MPI_Wtime();
     default_alltoallv_time = (eTime - sTime)/5;
 
-    //Optimized MPI_Alltoallv1
-    sTime = MPI_Wtime();
-    optimized_alltoallv_v1(5);
-    eTime = MPI_Wtime();
-    optimized_alltoallv_time = (eTime - sTime)/5;
-  
-//    //Optimized MPI_Alltoallv2
+//    //Optimized MPI_Alltoallv1
 //    sTime = MPI_Wtime();
-//    optimized_alltoallv_v2(5);
+//    optimized_alltoallv_v1(5);
 //    eTime = MPI_Wtime();
 //    optimized_alltoallv_time = (eTime - sTime)/5;
+//  
+    //Optimized MPI_Alltoallv2
+    sTime = MPI_Wtime();
+    optimized_alltoallv_v2(5);
+    eTime = MPI_Wtime();
+    optimized_alltoallv_time = (eTime - sTime)/5;
 
     // obtain max time
     MPI_Reduce (&default_bcast_time, &max_default_bcast_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
