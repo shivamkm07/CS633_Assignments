@@ -557,7 +557,7 @@ int main( int argc, char *argv[])
   sendcounts = (int*)malloc((size+1)*sizeof(int));
   sdispls = (int*)malloc((size+1)*sizeof(int));
   for(int i=0;i<size;i++){
-    sendcounts[i] = rand()%N;
+    sendcounts[i] = 1;
   }
   sdispls[0] = 0;
   for(int i=1;i<size;i++){

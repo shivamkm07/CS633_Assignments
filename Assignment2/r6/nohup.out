@@ -1,11 +1,11 @@
- 16:06:47 up 9 days,  3:22,  0 users,  load average: 29.55, 28.53, 29.62
- 16:06:48 up 3 days, 18:29,  2 users,  load average: 28.37, 28.96, 30.69
+ 17:16:08 up 9 days,  4:31,  0 users,  load average: 31.67, 34.71, 36.07
+ 17:16:09 up 3 days, 19:39,  2 users,  load average: 28.83, 29.80, 30.44
 ssh: connect to host csews33 port 22: No route to host
 ssh: connect to host csews34 port 22: No route to host
- 16:06:57 up 43 days,  4:30,  0 users,  load average: 34.11, 34.65, 36.62
- 16:06:58 up 43 days, 21:45,  1 user,  load average: 32.32, 32.50, 33.65
- 16:06:57 up 77 days,  5:22,  0 users,  load average: 8.32, 8.22, 8.16
- 16:06:56 up 48 days, 47 min,  0 users,  load average: 8.00, 8.07, 8.13
+ 17:16:19 up 43 days,  5:40,  0 users,  load average: 36.37, 36.10, 36.03
+ 17:16:20 up 43 days, 22:54,  1 user,  load average: 32.58, 32.61, 32.68
+ 17:16:19 up 77 days,  6:32,  0 users,  load average: 8.19, 8.24, 8.24
+ 17:16:18 up 48 days,  1:57,  0 users,  load average: 8.07, 8.15, 8.19
 [3J[H[2Jcsews2
 csews2,csews3,csews4,csews5,csews6,csews7,csews8,csews9,csews10,csews11,csews12,csews14,csews15,csews16,csews31
 1 1
@@ -27,14 +27,14 @@ csews79
 i 1  P 4 ppn 1 d 16
 i 1  P 4 ppn 1 d 256
 i 1  P 4 ppn 1 d 2048
- 16:14:47 up 9 days,  3:30,  0 users,  load average: 27.85, 28.27, 29.06
- 16:14:48 up 3 days, 18:37,  2 users,  load average: 30.90, 32.32, 31.64
+ 17:22:05 up 9 days,  4:37,  0 users,  load average: 33.08, 33.17, 34.87
+ 17:22:06 up 3 days, 19:45,  2 users,  load average: 30.91, 30.65, 30.64
 ssh: connect to host csews33 port 22: No route to host
 ssh: connect to host csews34 port 22: No route to host
- 16:14:56 up 43 days,  4:38,  0 users,  load average: 37.85, 37.94, 37.37
- 16:14:58 up 43 days, 21:53,  1 user,  load average: 35.58, 35.87, 34.75
- 16:14:57 up 77 days,  5:30,  0 users,  load average: 8.16, 8.17, 8.16
- 16:14:55 up 48 days, 55 min,  0 users,  load average: 8.32, 8.19, 8.16
+ 17:22:14 up 43 days,  5:46,  0 users,  load average: 37.03, 36.67, 36.30
+ 17:22:16 up 43 days, 23:00,  1 user,  load average: 33.33, 33.08, 32.85
+ 17:22:15 up 77 days,  6:38,  0 users,  load average: 8.43, 8.35, 8.28
+ 17:22:13 up 48 days,  2:03,  0 users,  load average: 8.35, 8.22, 8.22
 [3J[H[2Jcsews2
 csews2,csews3,csews4,csews5,csews6,csews7,csews8,csews9,csews10,csews11,csews12,csews14,csews15,csews16,csews31
 1 1
