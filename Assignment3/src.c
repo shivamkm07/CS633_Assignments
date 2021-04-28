@@ -17,13 +17,15 @@ int main(int argc, char* argv[])
     int myrows,mycols,nrows,ncols;
     float* recvdata,*local_min,*global_min,*check_min;
     double stime,etime,time;
+    char* filename = argv[1];
+  float tot_min;
 
    int myrank,size;
    MPI_Comm_rank(MPI_COMM_WORLD,&myrank);
    MPI_Comm_size(MPI_COMM_WORLD,&size);
 
    if(myrank == 0){
-     fp = fopen("tdata.csv", "r");
+     fp = fopen(filename, "r");
      if(fp == NULL)
        exit(1);
   
@@ -82,6 +84,9 @@ int main(int argc, char* argv[])
 
    stime = MPI_Wtime();
 
+   int niters = 1;
+   for(int iter = 0;iter < niters;iter++){
+
    MPI_Bcast(dim,2,MPI_INT,0,MPI_COMM_WORLD);
    myrows = dim[0];
    mycols = dim[1];
@@ -121,7 +126,6 @@ int main(int argc, char* argv[])
    global_min = (float*)malloc(mycols*sizeof(float));
 
    MPI_Reduce(local_min,global_min,mycols,MPI_FLOAT,MPI_MIN,0,MPI_COMM_WORLD);
-  float tot_min;
 
    if(myrank == 0){
      for(int i=(nrows/size)*size;i<nrows;i++){
@@ -136,8 +140,9 @@ int main(int argc, char* argv[])
          tot_min = global_min[i];
      }
    }
+   }
    etime = MPI_Wtime();
-   time = etime - stime;
+   time = (etime - stime)/niters;
    double maxtime;
    MPI_Reduce(&time,&maxtime,1,MPI_DOUBLE,MPI_MAX,0,MPI_COMM_WORLD);
    FILE* fptr;
