@@ -84,7 +84,7 @@ int main(int argc, char* argv[])
 
    stime = MPI_Wtime();
 
-   int niters = 1;
+   int niters = 10;
    for(int iter = 0;iter < niters;iter++){
 
    MPI_Bcast(dim,2,MPI_INT,0,MPI_COMM_WORLD);
